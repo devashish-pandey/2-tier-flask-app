@@ -1,130 +1,127 @@
- 
-# Flask App with MySQL Docker Setup
+# 2-Tier Flask App — Jenkins CI/CD Learning Project
 
-This is a simple Flask app that interacts with a MySQL database. The app allows users to submit messages, which are then stored in the database and displayed on the frontend.
+A hands-on project where I took a 2-tier Flask + MySQL application and built a full Jenkins CI/CD pipeline around it — from GitHub webhook triggers to automated Docker builds, Docker Hub pushes, and Compose-based deployment.
 
-## Prerequisites
+## 📦 Original Project
+Forked from: [https://github.com/LondheShubham153/two-tier-flask-app]
 
-Before you begin, make sure you have the following installed:
+## 🛠️ What I Added / Changed
+- Jenkins Pipeline (`Jenkinsfile`) with staged CI/CD workflow
+- GitHub Webhook integration for automatic pipeline triggers on push
+- Pipeline configured from SCM (Jenkins pulls the pipeline definition directly from the repo)
+- Automated Docker image build as part of the pipeline
+- Automated Docker Hub push (tag + push)
+- Docker Compose–based deployment (Flask + MySQL, with healthcheck)
+- `.dockerignore` configuration to fix build context issues
+- CI/CD troubleshooting — real pipeline failures and their fixes
+- Documentation of errors and solutions (kept alongside the code, not just in my head)
 
-- Docker
-- Git (optional, for cloning the repository)
+---
 
-## Setup
+## 🔄 CI/CD Workflow
+```
+GitHub
+   ↓
+Webhook
+   ↓
+Jenkins
+   ↓
+Build
+   ↓
+Test
+   ↓
+Docker Hub
+   ↓
+Docker Compose
+   ↓
+Flask + MySQL
+```
 
-1. Clone this repository (if you haven't already):
+**In words:** a `git push` to GitHub fires a webhook → Jenkins picks up the change and runs the pipeline → the app image is built → basic tests run → the image is pushed to Docker Hub → Docker Compose pulls/builds and redeploys the Flask + MySQL stack.
 
-   ```bash
-   git clone https://github.com/your-username/your-repo-name.git
-   ```
+---
 
-2. Navigate to the project directory:
+## ⚙️ Jenkins Pipeline Stages
 
-   ```bash
-   cd your-repo-name
-   ```
+| Stage | What Happens |
+|---|---|
+| **Code Checkout** | Jenkins pulls the latest code from the GitHub repo |
+| **Docker Build** | Builds the Flask app image from the Dockerfile |
+| **Test** | Runs basic tests/checks against the built image |
+| **Push to Docker Hub** | Tags and pushes the image to Docker Hub |
+| **Deploy** | Runs `docker compose up -d --build` to redeploy Flask + MySQL |
 
-3. Create a `.env` file in the project directory to store your MySQL environment variables:
+See [`Jenkinsfile`](./Jenkinsfile) for the full pipeline definition.
 
-   ```bash
-   touch .env
-   ```
+---
 
-4. Open the `.env` file and add your MySQL configuration:
+## 🔗 GitHub Webhook Setup
+1. Jenkins job config → enable **"GitHub hook trigger for GITScm polling"**
+2. GitHub repo → **Settings → Webhooks → Add webhook**
+   - Payload URL: `http://<jenkins-server>:8080/github-webhook/`
+   - Content type: `application/json`
+   - Event: **Just the push event**
 
-   ```
-   MYSQL_HOST=mysql
-   MYSQL_USER=your_username
-   MYSQL_PASSWORD=your_password
-   MYSQL_DB=your_database
-   ```
+Once set up, every push to `main`/`master` automatically triggers a full pipeline run — no manual "Build Now" needed.
 
-## Usage
+---
 
-1. Start the containers using Docker Compose:
+## 🐛 CI/CD Troubleshooting — Real Issues I Hit
 
-   ```bash
-   docker-compose up --build
-   ```
+### 1. Docker build failed — permission denied reading `mysql-data/`
+```
+checking context: no permission to read from
+'/var/lib/jenkins/workspace/cicd-pra/mysql-data/auto.cnf'
+```
+**Cause:** My local MySQL data folder (`mysql-data/`, written by the running MySQL container) got swept into the Docker build context. Those files are owned by MySQL's internal container user, which the `jenkins` system user couldn't read.
+**Fix:** Excluded it via `.dockerignore` and `.gitignore` — runtime database files should never be part of a build context.
 
-2. Access the Flask app in your web browser:
+### 2. Docker push failed — "repository name must be lowercase"
+```
+docker push ****/two-tier-flask-app:latest
+repository name must be lowercase
+```
+**Cause:** The push stage referenced the **password** credential variable instead of the **username** variable when building the image path (Jenkins masking part of the log with `****` was the giveaway that a credential, not plain text, was in that string).
+**Fix:** Corrected the variable reference (`$dockerHubUser`, not `$dockerHubPass`) and switched from `-p` to `--password-stdin` for safer credential handling.
 
-   - Frontend: http://localhost
-   - Backend: http://localhost:5000
+📄 Full write-up with root-cause analysis for both issues: [`13-jenkins-debugging-real-issues.md`](../13-jenkins-debugging-real-issues.md)
 
-3. Create the `messages` table in your MySQL database:
+---
 
-   - Use a MySQL client or tool (e.g., phpMyAdmin) to execute the following SQL commands:
-   
-     ```sql
-     CREATE TABLE messages (
-         id INT AUTO_INCREMENT PRIMARY KEY,
-         message TEXT
-     );
-     ```
-
-4. Interact with the app:
-
-   - Visit http://localhost to see the frontend. You can submit new messages using the form.
-   - Visit http://localhost:5000/insert_sql to insert a message directly into the `messages` table via an SQL query.
-
-## Cleaning Up
-
-To stop and remove the Docker containers, press `Ctrl+C` in the terminal where the containers are running, or use the following command:
-
+## 🚀 How to Run This Locally
 ```bash
-docker-compose down
+git clone <this-repo-url>
+cd 2-tier-flask-app
+docker compose up -d --build
+curl http://localhost:5000/health
 ```
 
-## To run this two-tier application using  without docker-compose
+To trigger the full CI/CD flow instead of running locally, push a change to the connected GitHub repo and watch the pipeline run in Jenkins.
 
-- First create a docker image from Dockerfile
-```bash
-docker build -t flaskapp .
+---
+
+## 📁 Project Structure
+```
+2-tier-flask-app/
+├── app.py
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+├── Jenkinsfile
+├── .dockerignore
+├── README.md
+└── screenshots/
+    ├── pipeline-success.png
+    ├── github-webhook-config.png
+    └── dockerhub-image.png
 ```
 
-- Now, make sure that you have created a network using following command
-```bash
-docker network create twotier
-```
+---
 
-- Attach both the containers in the same network, so that they can communicate with each other
+## 📌 Key Takeaway
+Automating a deployment doesn't remove the need to understand what's happening underneath — every Jenkins failure I hit traced back to something I'd already learned manually with plain Docker commands (build context rules, credential handling, tagging conventions). CI/CD just means those same rules now apply inside someone else's execution environment, with less room to eyeball what went wrong — which is exactly why documenting each error mattered.
 
-i) MySQL container 
-```bash
-docker run -d \
-    --name mysql \
-    -v mysql-data:/var/lib/mysql \
-    --network=twotier \
-    -e MYSQL_DATABASE=mydb \
-    -e MYSQL_ROOT_PASSWORD=admin \
-    -p 3306:3306 \
-    mysql:5.7
-
-```
-ii) Backend container
-```bash
-docker run -d \
-    --name flaskapp \
-    --network=twotier \
-    -e MYSQL_HOST=mysql \
-    -e MYSQL_USER=root \
-    -e MYSQL_PASSWORD=admin \
-    -e MYSQL_DB=mydb \
-    -p 5000:5000 \
-    flaskapp:latest
-
-```
-
-## Notes
-
-- Make sure to replace placeholders (e.g., `your_username`, `your_password`, `your_database`) with your actual MySQL configuration.
-
-- This is a basic setup for demonstration purposes. In a production environment, you should follow best practices for security and performance.
-
-- Be cautious when executing SQL queries directly. Validate and sanitize user inputs to prevent vulnerabilities like SQL injection.
-
-- If you encounter issues, check Docker logs and error messages for troubleshooting.
-
-```
-
+## 🔗 Related Notes
+- [12 — Jenkins CI/CD Pipeline (concepts)](../12-jenkins-cicd-pipeline.md)
+- [13 — Jenkins Debugging: Real Issues](../13-jenkins-debugging-real-issues.md)
+- Full learning repo: https://github.com/devashish-pandey/docker-learning

@@ -35,4 +35,20 @@ pipeline {
             }
         }
     }
+    post {
+        success {
+            emailext(
+                subject:"Succesful build",
+                body:"Good , succsess in build",
+                to: 'pdevashish587@gmail.com'
+                )
+        }
+        failure{
+            emailext(
+                subject:"failed build",
+                body:"Bad , failure in build",
+                to: 'pdevashish587@gmail.com'
+                )
+        }
+    }
 }

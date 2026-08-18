@@ -6,6 +6,11 @@ pipeline {
                 git url: "https://github.com/devashish-pandey/2-tier-flask-app.git", branch: "master"
             }
         }
+        stage("Trivy"){
+            steps{
+                sh "trivy fs . -o result.json"
+            }
+        }
         stage("Build"){
             steps{
                 sh "docker build -t two-tier-flask-app ."

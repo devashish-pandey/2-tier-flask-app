@@ -1,14 +1,19 @@
+@Library("Shared") _
 pipeline {
     agent { label "dev" }
     stages{
         stage("code"){
             steps{
-                git url: "https://github.com/devashish-pandey/2-tier-flask-app.git", branch: "master"
+                script{
+                    clone("https://github.com/devashish-pandey/2-tier-flask-app.git","master")
+                }
             }
         }
         stage("Trivy"){
             steps{
-                sh "trivy fs . -o result.json"
+                script{
+                    trivy_fs()
+                }
             }
         }
         stage("Build"){
@@ -23,17 +28,11 @@ pipeline {
         }
         stage("Push"){
             steps{
-                withCredentials([usernamePassword(
-                    credentialsId: "dockerCred",
-                    passwordVariable: "dockerHubPass",
-                    usernameVariable: "dockerHubUser"
-                    )]){
-                        sh "docker login -u ${env.dockerHubUser} -p ${env.dockerHubPass}"
-                        sh "docker image tag two-tier-flask-app ${env.dockerHubUser}/two-tier-flask-app"
-                        sh "docker push ${env.dockerHubUser}/two-tier-flask-app:latest"
-                    }
+                script{
+                    docker_push("dockerCred","two-tier-flask-app")
                 }
             }
+        }
         stage("Deploy"){
             steps{
                 sh "docker compose up -d --build"

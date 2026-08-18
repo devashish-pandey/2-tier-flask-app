@@ -9,11 +9,9 @@ pipeline {
                 }
             }
         }
-        stage("Trivy"){
-            steps{
-                script{
-                    trivy_fs()
-                }
+        stage("Trivy") {
+            steps {
+                sh "trivy fs . -o result.json"
             }
         }
         stage("Build"){
